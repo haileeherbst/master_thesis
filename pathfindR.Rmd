@@ -1,0 +1,111 @@
+---
+title: "pathfindR Network Enrichment"
+date: "4/20/2022"
+output:
+  html_notebook:
+    highlight: default
+    number_sections: yes
+    theme: united
+    toc: yes
+    toc_depth: 2
+    code: hide
+  pdf_document:
+    fig_caption: yes
+    fig_crop: no
+    number_sections: yes
+    toc: yes
+  html_document:
+    toc: yes
+    df_print: paged
+---
+
+
+
+```{r setup, include=FALSE}
+library(pathfindR)
+library(tidyverse)
+library(dplyr)
+```
+
+```{r}
+total_RNAseq <- readRDS(here::here("initial_data/total_RNAseq_all_annot_results.rds"))
+network <- readRDS(here::here("initial_data/resistant_hybrid_network.rds"))
+extended_network <- readRDS(here::here("initial_data/stringent_resistant.rds"))
+```
+
+# Start with the reduced triplicate network
+
+# Create a dataframe of RNAseq data related to genes identified in network
+```{r}
+network_RNAseq <- semi_join(total_RNAseq, network, by = c("gene_name" = "mRNA"))
+SK_R_RNAseq <- network_RNAseq %>% filter(grepl("SK", contrast))
+SK_R_RNAseq <- select(SK_R_RNAseq, gene_name, log2FoldChange, pvalue)
+extended_IPC_R_RNAseq <- network_RNAseq %>% filter(grepl("IPC", contrast))
+extended_IPC_R_RNAseq <- select(extended_IPC_R_RNAseq, gene_name, log2FoldChange, pvalue)
+```
+
+
+# Run through various pathfindR PINs and databases
+
+### Option to change the database (KEGG, Reactome, Biocarta, GO-BP, GO-All, GO-CC, GO-MF, cell_markers, mmu_KEGG, Custom (default: KEGG))
+```{r}
+output_ipc_Reactome <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "Reactome", output_dir = "results/triplicate_network/enrichment_results/IPCR_Reactome")
+output_sk_Reactome <- run_pathfindR(SK_R_RNAseq, gene_sets = "Reactome", output_dir = "results/triplicate_network/enrichment_results/SKR_Reactome")
+```
+
+
+
+### Option to change the mapping PIN (Biogrid, STRING, GeneMania, IntAct, KEGG, mmu_STRING (default: biogrid))
+```{r}
+output_IPC_Reactome <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "Reactome", pin_name_path = "STRING", output_dir = "results/triplicate_network/enrichment_results/IPCR_Reactome")
+output_SK_Reactome <- run_pathfindR(SK_R_RNAseq, gene_sets = "Reactome", pin_name_path = "STRING", output_dir = "results/triplicate_network/enrichment_results/SKR_Reactome")
+
+output_IPC_GO_ALL <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "GO-All", pin_name_path = "STRING", output_dir = "results/triplicate_network/enrichment_results/IPCR_GO_ALL")
+output_SK_GO_ALL <- run_pathfindR(SK_R_RNAseq, gene_sets = "GO-All", pin_name_path = "STRING", output_dir = "results/triplicate_network/enrichment_results/SKR_GO_ALL")
+
+output_IPC_BioCarta <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "STRING", output_dir = "results/triplicate_network/enrichment_results/IPCR_BioCarta")
+output_SK_BioCarta <- run_pathfindR(SK_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "STRING", output_dir = "results/triplicate_network/enrichment_results/SKR_BioCarta")
+
+output_IPC_BioCarta_biogrid <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "Biogrid", output_dir = "results/triplicate_network/enrichment_results/IPCR_BioCarta_biogrid")
+output_SK_BioCarta_biogrid <- run_pathfindR(SK_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "Biogrid", output_dir = "results/triplicate_network/enrichment_results/SKR_BioCarta_biogrid")
+```
+
+
+
+
+# Repeat with the extended network
+
+# Create a dataframe of RNAseq data related to genes identified in network
+```{r}
+extended_network_RNAseq <- semi_join(total_RNAseq,extended_network, by = c("gene_name" = "mRNA"))
+extended_SK_R_RNAseq <- extended_network_RNAseq %>% filter(grepl("SK", contrast))
+extended_SK_R_RNAseq <- select(extended_SK_R_RNAseq, gene_name, log2FoldChange, pvalue)
+extended_IPC_R_RNAseq <- extended_network_RNAseq %>% filter(grepl("IPC", contrast))
+extended_IPC_R_RNAseq <- select(extended_IPC_R_RNAseq, gene_name, log2FoldChange, pvalue)
+```
+
+
+# Run through various pathfindR PINs and databases
+
+### Option to change the database (KEGG, Reactome, Biocarta, GO-BP, GO-All, GO-CC, GO-MF, cell_markers, mmu_KEGG, Custom (default: KEGG))
+```{r}
+output_ipc_KEGG <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "KEGG", output_dir = "results/extended_network/enrichment_results/IPCR_KEGG")
+output_sk_KEGG <- run_pathfindR(extended_SK_R_RNAseq, gene_sets = "KEGG", output_dir = "results/extended_network/enrichment_results/SKR_KEGG")
+```
+
+
+
+### Option to change the mapping PIN (Biogrid, STRING, GeneMania, IntAct, KEGG, mmu_STRING (default: biogrid))
+```{r}
+output_IPC_Reactome <- run_pathfindR(extended_extended_IPC_R_RNAseq, gene_sets = "Reactome", pin_name_path = "KEGG", output_dir = "results/extended_network/enrichment_results/IPCR_Reactome")
+output_SK_Reactome <- run_pathfindR(extended_SK_R_RNAseq, gene_sets = "Reactome", pin_name_path = "KEGG", output_dir = "results/extended_network/enrichment_results/SKR_Reactome")
+
+output_IPC_BioCarta <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "KEGG", output_dir = "results/extended_network/enrichment_results/IPCR_BioCarta")
+output_SK_BioCarta <- run_pathfindR(extended_SK_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "KEGG", output_dir = "results/extended_network/enrichment_results/SKR_BioCarta")
+
+output_IPC_GO_ALL <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "GO-All", pin_name_path = "STRING", output_dir = "results/extended_network/enrichment_results/IPCR_GO_ALL")
+output_SK_GO_ALL <- run_pathfindR(extended_SK_R_RNAseq, gene_sets = "GO-All", pin_name_path = "STRING", output_dir = "results/extended_network/enrichment_results/SKR_GO_ALL")
+
+output_IPC_BioCarta_biogrid <- run_pathfindR(extended_IPC_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "Biogrid", output_dir = "results/extended_network/enrichment_results/IPCR_BioCarta_biogrid")
+output_SK_BioCarta_biogrid <- run_pathfindR(extended_SK_R_RNAseq, gene_sets = "BioCarta", pin_name_path = "Biogrid", output_dir = "results/extended_network/enrichment_results/SKR_BioCarta_biogrid")
+```

@@ -1,0 +1,182 @@
+---
+title: "Threshold Network"
+author: "Vincent Gureghian, Anthoula Gaigneaux, Hailee Herbst"
+date: "4/4/2022"
+output:
+  html_notebook:
+    highlight: default
+    number_sections: yes
+    theme: united
+    toc: yes
+    toc_depth: 2
+    code: hide
+  pdf_document:
+    fig_caption: yes
+    fig_crop: no
+    number_sections: yes
+    toc: yes
+  html_document:
+    toc: yes
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(UpSetR)
+library(ggupset)
+library(igraph)
+library(visNetwork)
+library(linkcomm)
+library(RCy3)
+
+```
+
+
+
+```{r}
+total_count_data <- readRDS(here::here("initial_data/total_count_data.rds"))
+```
+
+# Log transform the data
+```{r pressure, echo=FALSE}
+
+log_counts <- total_count_data
+log_counts[, 8:10] <- log2(total_count_data[8:10])
+
+```
+
+## Relaxed threshold
+``` {r}
+log_counts_relaxed <- log_counts
+log_counts_relaxed <- log_counts_relaxed[which(log_counts_relaxed$hybrid_count >= 0.7),]
+log_counts_relaxed <- log_counts_relaxed[which(log_counts_relaxed$mRNA_count >= 0),]
+log_counts_relaxed <- log_counts_relaxed[which(log_counts_relaxed$miRNA_count >= 3),]
+
+relaxed_threshold <- log_counts_relaxed
+#saveRDS(relaxed_threshold, "relaxed_threshold.RDS")
+```
+
+## Stringent threshold
+```{r}
+log_counts_stringent <- log_counts
+log_counts_stringent <- log_counts_stringent[which(log_counts_stringent$hybrid_count >= 1.2),]
+log_counts_stringent <- log_counts_stringent[which(log_counts_stringent$mRNA_count >= 5.5),]
+log_counts_stringent <- log_counts_stringent[which(log_counts_stringent$miRNA_count >= 5.0),]
+
+stringent_threshold <- log_counts_stringent
+#saveRDS(stringent_threshold, "stringent_threshold.RDS")
+```
+
+
+# Compare sensitive and resistant hybrids that meet threshold 
+```{r}
+resistant_stringent <- stringent_threshold %>% filter(grepl("_R", cell_line))
+IPC_R_stringent <- resistant_stringent %>% filter(grepl("IPC_R", cell_line))
+SK_R_stringent <- resistant_stringent %>% filter(grepl("SK_R", cell_line))
+resistant_comp <- semi_join(IPC_R_stringent, SK_R_stringent, by = "hybrids")
+
+IPC_stringent <- stringent_threshold %>% filter(grepl("^IPC$", cell_line))
+SK_stringent <- stringent_threshold %>% filter(grepl("^SK$", cell_line))
+sensitive_comp <- semi_join(IPC_stringent, SK_stringent, by = "hybrids")
+
+stringent_differences <- anti_join(resistant_comp, sensitive_comp, by = "hybrids")
+#saveRDS(stringent_differences, "stringent_resistant.RDS")
+
+stringent_differences2 <- anti_join(sensitive_comp, resistant_comp, by = "hybrids")
+#saveRDS(stringent_differences2, "stringent_sensitive.RDS")
+```
+
+# Build Network Based on Threshold
+``` {r}
+qCLASH_treated <- readRDS(here::here("initial_data/hyb_resistant.rds"))
+stringent_resistant <-readRDS(here::here("initial_data/stringent_resistant.rds"))
+resistant2_network <- semi_join(qCLASH_treated, stringent_resistant, by = "hybrids")
+```
+
+
+# Data exploration
+
+```{r, eval=F, echo=FALSE}
+
+#distribution among replicates
+
+resistant2_network %>% 
+  group_by(Sample) %>% 
+  count() %>% 
+  ggplot(aes(x=Sample, y=n)) +
+  geom_bar(stat="identity")
+
+```
+
+
+
+```{r, intersections of hybrids between cell lines, echo=FALSE}
+listInput <- list(IPC298_R = resistant2_network %>% filter(grepl("IPC", Sample)) %>%  dplyr::select(hybrids) %>%  as_vector(),
+                  SKMel30_R = resistant2_network %>% filter(grepl("SK30",Sample)) %>% dplyr::select(hybrids) %>% as_vector())
+
+upset(fromList(listInput), order.by = "freq")
+
+```
+
+
+```{r, intersections of hybrids between technical replicates, echo=FALSE}
+
+resistant2_network %>% 
+  dplyr::select(cell_line, Sample, hybrids) %>% 
+  distinct(cell_line, Sample, hybrids, .keep_all=TRUE) %>%
+  group_by(hybrids) %>% 
+  summarize(Sample=list(Sample)) %>% 
+  ggplot(aes(x=Sample)) +
+    geom_bar() +
+    scale_x_upset(n_intersections = 36)
+    #facet_wrap(~cell_line)
+
+```
+
+
+
+# Network construction
+
+```{r, extract edges and build network, echo=FALSE}
+
+miRNA_gene_interaction <- resistant2_network %>% 
+  group_by(hybrids) %>% 
+  summarise(samples = list(Sample %>% unique()), miRNA, mRNA ) %>%
+  mutate(total = map_int( samples, length)) %>%
+  distinct() %>%
+  ungroup(hybrids) %>% 
+  dplyr::select(miRNA, mRNA) %>% 
+  as.matrix()
+
+res2_network <- graph_from_edgelist(miRNA_gene_interaction, directed = FALSE)
+
+visIgraph(res2_network)
+
+```
+
+
+# Identify Overlaps in Hybrids
+```{r}
+miRNA_gene_interaction <- as.data.frame.matrix(miRNA_gene_interaction)
+miRNA_gene_interaction$hybrids <- paste(miRNA_gene_interaction$miRNA, miRNA_gene_interaction$mRNA, sep= "_")
+#saveRDS(miRNA_gene_interaction, "stringent_network_1181.rds")
+
+stringent_qCLASH <- semi_join(qCLASH_treated, miRNA_gene_interaction, by = "hybrids")
+#saveRDS(stringent_qCLASH, "stringent_qCLASH.RDS")
+```
+
+# Export to Cytoscape
+```{r}
+createNetworkFromIgraph(
+  res2_network,
+  title = "SK_R Stringent Threshold",
+  collection = "SK_R Stringent Threshold"
+)
+
+createNetworkFromIgraph(
+  res2_network,
+  title = "IPC_R Stringent Threshold",
+  collection = "IPC_R Stringent Threshold"
+)
+```
